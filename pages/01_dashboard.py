@@ -6,6 +6,7 @@ from ui.layout import navbar, sidebar_menu
 from core.db import query_df
 from core.auth import ensure_auth_state
 from core.settings import APP_TITLE
+from path_bootstrap import ROOT  # فقط برای اطمینان از sys.path
 
 def main():
     init_page(title=APP_TITLE, layout="wide")
