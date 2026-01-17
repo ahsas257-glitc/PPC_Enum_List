@@ -3,6 +3,7 @@ from ui.theme import init_page, apply_theme, theme_switcher
 from ui.layout import navbar, sidebar_menu
 from core.auth import ensure_auth_state
 from core.settings import APP_TITLE
+from path_bootstrap import ROOT  # فقط برای اطمینان از sys.path
 
 
 def main():
@@ -22,3 +23,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
