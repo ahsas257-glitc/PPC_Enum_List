@@ -1,16 +1,14 @@
-import re
-import pandas as pd
 import streamlit as st
-
+import pandas as pd
+from core.db import query_df
 from ui.theme import init_page, apply_theme, theme_switcher
 from ui.layout import navbar, sidebar_menu
 from ui.components import card_start, card_end
-from core.db import query_df
-
 
 # -----------------------------
 # Helpers (UI + Public Safety)
 # -----------------------------
+
 def _mask_phone(v: str) -> str:
     if v is None:
         return ""
@@ -20,10 +18,8 @@ def _mask_phone(v: str) -> str:
     digits = re.sub(r"\D+", "", s)
     if len(digits) <= 4:
         return "*" * len(digits)
-    # keep last 3-4 digits
     keep = 4 if len(digits) >= 8 else 3
     return ("*" * (len(digits) - keep)) + digits[-keep:]
-
 
 def _mask_tazkira(v: str) -> str:
     if v is None:
@@ -31,24 +27,17 @@ def _mask_tazkira(v: str) -> str:
     s = str(v).strip()
     if not s:
         return ""
-    # keep last 3 chars visible
     if len(s) <= 3:
         return "*" * len(s)
     return ("*" * (len(s) - 3)) + s[-3:]
 
-
 def _safe_str(x):
     return "" if x is None else str(x)
 
-
 def _highlight_matches(df: pd.DataFrame, q: str):
-    """
-    Highlight any cell containing q (case-insensitive).
-    """
     query = q.strip()
     if not query:
         return df.style
-
     pat = re.compile(re.escape(query), re.IGNORECASE)
 
     def style_cell(val):
@@ -56,71 +45,37 @@ def _highlight_matches(df: pd.DataFrame, q: str):
         if pat.search(s):
             return "background-color: rgba(255, 230, 150, 0.75); font-weight: 600;"
         return ""
-
     return df.style.applymap(style_cell)
-
 
 def _get_province_options():
     try:
         p = query_df(
             """
-            SELECT Province_Code, Province_Name
+            SELECT province_code, province_name
             FROM provinces
-            ORDER BY Province_Name
+            ORDER BY province_name
             """
         )
         if p.empty:
             return []
-        return list(zip(p["Province_Code"].tolist(), p["Province_Name"].tolist()))
+        return list(zip(p["province_code"].tolist(), p["province_name"].tolist()))
     except Exception:
         return []
 
-
-def _get_org_options_if_any():
-    """
-    Optional: works only if you have organization fields/tables.
-    If not available, it will quietly return empty.
-    Adjust query to your real schema if needed.
-    """
-    candidates = [
-        # Option A: organizations table
-        """
-        SELECT Organization_Code AS Org_Code, Organization_Name AS Org_Name
-        FROM organizations
-        ORDER BY Organization_Name
-        """,
-        # Option B: field on surveyors table
-        """
-        SELECT DISTINCT Organization AS Org_Name
-        FROM surveyors
-        WHERE Organization IS NOT NULL AND Organization <> ''
-        ORDER BY Organization
-        """,
-    ]
-
-    for sql in candidates:
-        try:
-            o = query_df(sql)
-            if o is None or o.empty:
-                continue
-
-            # normalize into list of tuples (code_or_name, name)
-            if "Org_Code" in o.columns and "Org_Name" in o.columns:
-                return list(zip(o["Org_Code"].tolist(), o["Org_Name"].tolist()))
-            if "Org_Name" in o.columns:
-                return [(name, name) for name in o["Org_Name"].tolist()]
-        except Exception:
-            continue
-
-    return []
-
-
-def _render_header_stats(total_found: int, page: int, page_size: int):
-    left, mid, right = st.columns([1, 1, 1])
-    left.metric("Found", total_found)
-    mid.metric("Page", page + 1)
-    right.metric("Page size", page_size)
-
+def _get_project_options():
+    try:
+        p = query_df(
+            """
+            SELECT project_id, project_name
+            FROM projects
+            ORDER BY project_name
+            """
+        )
+        if p.empty:
+            return []
+        return list(zip(p["project_id"].tolist(), p["project_name"].tolist()))
+    except Exception:
+        return []
 
 # -----------------------------
 # Main Page
@@ -128,10 +83,8 @@ def _render_header_stats(total_found: int, page: int, page_size: int):
 def main():
     init_page(title="PPC Surveyor Database", layout="wide")
     sidebar_menu()
-
     theme = theme_switcher(default="light")
     apply_theme(theme)
-
     navbar("PPC Surveyor Database", right_text="Public Search")
 
     st.title("🔎 Public Surveyor Search")
@@ -144,8 +97,8 @@ def main():
         st.session_state.ps_q = ""
     if "ps_prov" not in st.session_state:
         st.session_state.ps_prov = "ALL"
-    if "ps_org" not in st.session_state:
-        st.session_state.ps_org = "ALL"
+    if "ps_proj" not in st.session_state:
+        st.session_state.ps_proj = "ALL"
     if "ps_page_size" not in st.session_state:
         st.session_state.ps_page_size = 20
 
@@ -156,7 +109,7 @@ def main():
         "Use filters to narrow down. Results are limited and masked for privacy."
     )
 
-    # Top filters (mobile-friendly: columns collapse naturally)
+    # Filters Section
     col1, col2, col3 = st.columns([2, 1.2, 1.2])
 
     with col1:
@@ -180,39 +133,30 @@ def main():
             key="ps_prov"
         )
 
-    org_options = _get_org_options_if_any()
-    org_map = {"ALL": "All Organizations"}
-    for code, name in org_options:
-        org_map[str(code)] = name
+    project_options = _get_project_options()
+    proj_map = {"ALL": "All Projects"}
+    for code, name in project_options:
+        proj_map[str(code)] = name
 
     with col3:
-        if len(org_options) > 0:
-            org_choice = st.selectbox(
-                "Organization",
-                options=list(org_map.keys()),
-                format_func=lambda k: org_map.get(k, k),
-                key="ps_org"
-            )
-        else:
-            st.caption("Organization filter not available")
-            st.session_state.ps_org = "ALL"
+        proj_choice = st.selectbox(
+            "Project",
+            options=list(proj_map.keys()),
+            format_func=lambda k: proj_map.get(k, k),
+            key="ps_proj"
+        )
 
-    # Secondary controls
-    c4, c5, c6 = st.columns([1, 1, 1])
+    # Results per page
+    c4, c5 = st.columns([1, 1])
     with c4:
         page_size = st.selectbox(
             "Results per page",
             options=[10, 20, 30, 50],
             key="ps_page_size"
         )
-    with c5:
-        mask_mode = st.toggle("Privacy mask", value=True, help="Mask phone/tazkira for public view.")
-    with c6:
-        compact = st.toggle("Compact table", value=False)
 
     # Reset pagination when query/filters change
-    # (simple approach: compare against stored snapshot)
-    snapshot = (st.session_state.ps_q.strip(), st.session_state.ps_prov, st.session_state.ps_org, st.session_state.ps_page_size)
+    snapshot = (st.session_state.ps_q.strip(), st.session_state.ps_prov, st.session_state.ps_proj, st.session_state.ps_page_size)
     if "ps_snapshot" not in st.session_state:
         st.session_state.ps_snapshot = snapshot
     if st.session_state.ps_snapshot != snapshot:
@@ -221,7 +165,7 @@ def main():
 
     q_clean = (st.session_state.ps_q or "").strip()
 
-    if not q_clean and st.session_state.ps_prov == "ALL" and st.session_state.ps_org == "ALL":
+    if not q_clean and st.session_state.ps_prov == "ALL" and st.session_state.ps_proj == "ALL":
         st.info("Type a search value or use filters to see results.")
         card_end()
         return
@@ -235,11 +179,11 @@ def main():
         where_parts.append(
             """
             (
-                s.Surveyor_Code LIKE %(like)s
-                OR s.Tazkira_No LIKE %(like)s
-                OR s.Surveyor_Name LIKE %(like)s
-                OR s.Phone_Number LIKE %(like)s
-                OR s.Whatsapp_Number LIKE %(like)s
+                s.surveyor_code LIKE %(like)s
+                OR s.surveyor_name LIKE %(like)s
+                OR s.tazkira_no LIKE %(like)s
+                OR s.phone_number LIKE %(like)s
+                OR s.whatsapp_number LIKE %(like)s
             )
             """
         )
@@ -249,25 +193,19 @@ def main():
         where_parts.append(
             """
             (
-                s.Permanent_Province_Code = %(prov)s
-                OR s.Current_Province_Code = %(prov)s
+                s.permanent_province_code = %(prov)s
+                OR s.current_province_code = %(prov)s
             )
             """
         )
 
-    # Organization filter (optional)
-    # Adjust this to your actual schema if you have it
-    org_filter_sql = ""
-    if len(org_options) > 0 and st.session_state.ps_org != "ALL":
-        params["org"] = st.session_state.ps_org
-        # Option A: organizations join with code
-        # Option B: surveyors.Organization field equals selected value
-        org_filter_sql = """
-            AND (
-                s.Organization = %(org)s
-                OR s.Organization_Code = %(org)s
-            )
-        """
+    if st.session_state.ps_proj != "ALL":
+        params["proj"] = st.session_state.ps_proj
+        where_parts.append(
+            """
+            s.project_id = %(proj)s
+            """
+        )
 
     where_sql = " AND ".join([p.strip() for p in where_parts if p.strip()])
     if not where_sql:
@@ -278,41 +216,27 @@ def main():
     page_size = int(st.session_state.ps_page_size)
     offset = page * page_size
 
-    # Total count for pagination
-    try:
-        total_df = query_df(
-            f"""
-            SELECT COUNT(*) AS total
-            FROM surveyors s
-            WHERE {where_sql}
-            {org_filter_sql}
-            """,
-            params
-        )
-        total_found = int(total_df.iloc[0]["total"]) if not total_df.empty else 0
-    except Exception:
-        total_found = 0
-
     # Query data (Public-safe columns)
     df = query_df(
         f"""
         SELECT
-          s.Surveyor_Code,
-          s.Surveyor_Name,
-          s.Gender,
-          s.Father_Name,
-          s.Tazkira_No,
-          s.Whatsapp_Number,
-          s.Phone_Number,
-          pp.Province_Name AS Permanent_Province,
-          cp.Province_Name AS Current_Province,
-          DATE(s.Created_At) AS Created_Date
+          s.surveyor_code,
+          s.surveyor_name,
+          s.gender,
+          s.father_name,
+          s.tazkira_no,
+          s.whatsapp_number,
+          s.phone_number,
+          pp.province_name AS permanent_province,
+          cp.province_name AS current_province,
+          p.project_name AS project_name,
+          DATE(s.created_at) AS created_date
         FROM surveyors s
-        LEFT JOIN provinces pp ON pp.Province_Code = s.Permanent_Province_Code
-        LEFT JOIN provinces cp ON cp.Province_Code = s.Current_Province_Code
+        LEFT JOIN provinces pp ON pp.province_code = s.permanent_province_code
+        LEFT JOIN provinces cp ON cp.province_code = s.current_province_code
+        LEFT JOIN projects p ON p.project_id = s.project_id
         WHERE {where_sql}
-        {org_filter_sql}
-        ORDER BY s.Surveyor_ID DESC
+        ORDER BY s.surveyor_id DESC
         LIMIT {page_size} OFFSET {offset}
         """,
         params
@@ -321,6 +245,7 @@ def main():
     st.divider()
 
     # Header stats + pager controls
+    total_found = len(df)
     _render_header_stats(total_found=total_found, page=page, page_size=page_size)
 
     pager_left, pager_mid, pager_right = st.columns([1, 2, 1])
@@ -339,7 +264,6 @@ def main():
             st.caption("No records count available or no results.")
 
     with pager_right:
-        # Next is disabled if we're at/after last page
         next_disabled = True
         if total_found > 0:
             total_pages = max(1, (total_found + page_size - 1) // page_size)
@@ -349,54 +273,21 @@ def main():
             st.session_state.ps_page = page + 1
             st.rerun()
 
-    # Render results
+    # Render results as Cards
     if df is None or df.empty:
         st.warning("No results found.")
         card_end()
         return
 
-    # Public masking
-    if mask_mode:
-        if "Phone_Number" in df.columns:
-            df["Phone_Number"] = df["Phone_Number"].apply(_mask_phone)
-        if "Whatsapp_Number" in df.columns:
-            df["Whatsapp_Number"] = df["Whatsapp_Number"].apply(_mask_phone)
-        if "Tazkira_No" in df.columns:
-            df["Tazkira_No"] = df["Tazkira_No"].apply(_mask_tazkira)
+    # Masking
+    df["phone_number"] = df["phone_number"].apply(_mask_phone)
+    df["whatsapp_number"] = df["whatsapp_number"].apply(_mask_phone)
+    df["tazkira_no"] = df["tazkira_no"].apply(_mask_tazkira)
 
-    # Optional: reorder columns for best UX
-    preferred_order = [
-        "Surveyor_Code",
-        "Surveyor_Name",
-        "Gender",
-        "Father_Name",
-        "Phone_Number",
-        "Whatsapp_Number",
-        "Permanent_Province",
-        "Current_Province",
-        "Tazkira_No",
-        "Created_Date",
-    ]
-    existing = [c for c in preferred_order if c in df.columns]
-    df = df[existing]
-
-    # Highlight
+    # Styling and final rendering
     styled = _highlight_matches(df, q_clean)
 
-    # Table options
-    if compact:
-        st.dataframe(
-            styled,
-            use_container_width=True,
-            hide_index=True,
-            height=420
-        )
-    else:
-        st.dataframe(
-            styled,
-            use_container_width=True,
-            hide_index=True
-        )
+    st.dataframe(styled, use_container_width=True, hide_index=True)
 
     # Public note
     with st.expander("Public Mode & Privacy"):
@@ -407,6 +298,11 @@ def main():
 
     card_end()
 
+def _render_header_stats(total_found: int, page: int, page_size: int):
+    left, mid, right = st.columns([1, 1, 1])
+    left.metric("Found", total_found)
+    mid.metric("Page", page + 1)
+    right.metric("Page size", page_size)
 
 if __name__ == "__main__":
     main()
