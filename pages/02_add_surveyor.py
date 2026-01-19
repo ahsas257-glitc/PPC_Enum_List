@@ -1,17 +1,19 @@
 import streamlit as st
+import re
 from ui.theme import init_page, apply_theme, theme_switcher
 from ui.layout import navbar, sidebar_menu
 from ui.components import card_start, card_end, field_error
 from core.db import load_provinces, get_connection
 from core.validators import COUNTRY_CODES, validate_email, validate_tazkira, normalize_phone
 
+# Handle exception for SURVEYOR_CODE_PREFIX import
 try:
     from core.settings import SURVEYOR_CODE_PREFIX
 except Exception:
     SURVEYOR_CODE_PREFIX = "PPC"
 
-
 def init_form_state():
+    """ Initialize the form state with default values. """
     defaults = {
         "surveyor_name": "",
         "gender": "Male",
@@ -33,8 +35,8 @@ def init_form_state():
     for k, v in defaults.items():
         st.session_state.setdefault(k, v)
 
-
 def validate_all(name_to_code: dict):
+    """ Validate all fields and return any errors. """
     e = {}
 
     if not st.session_state.surveyor_name.strip():
@@ -42,14 +44,17 @@ def validate_all(name_to_code: dict):
     if not st.session_state.father_name.strip():
         e["father_name"] = "Father name is required."
 
+    # Tazkira validation
     t_err = validate_tazkira(st.session_state.tazkira)
     if t_err:
         e["tazkira"] = t_err if isinstance(t_err, str) else "Invalid Tazkira number."
 
+    # Email validation
     mail_err = validate_email(st.session_state.email)
     if mail_err:
         e["email"] = mail_err if isinstance(mail_err, str) else "Invalid email address."
 
+    # Normalize WhatsApp and Phone numbers
     w_code = dict(COUNTRY_CODES).get(st.session_state.w_code_label, "+93")
     if st.session_state.w_code_label == "Other":
         w_code = st.session_state.w_custom.strip() or "+93"
@@ -66,6 +71,7 @@ def validate_all(name_to_code: dict):
     if p_err:
         e["phone_raw"] = p_err if isinstance(p_err, str) else "Invalid phone number."
 
+    # Validate provinces
     perm_code = name_to_code.get(st.session_state.perm_prov)
     curr_code = name_to_code.get(st.session_state.curr_prov)
 
@@ -76,18 +82,18 @@ def validate_all(name_to_code: dict):
 
     return e, w_norm, p_norm, perm_code, curr_code
 
-
 def get_next_surveyor_code_tx(conn, perm_prov_code: str) -> str:
+    """ Generate next surveyor code based on province sequence. """
     cur = conn.cursor()
 
     cur.execute(
         "INSERT IGNORE INTO province_sequences (Province_Code, Last_Number) VALUES (%s, 0)",
-        (perm_prov_code,),
+        (perm_prov_code,)
     )
 
     cur.execute(
         "SELECT Last_Number FROM province_sequences WHERE Province_Code=%s FOR UPDATE",
-        (perm_prov_code,),
+        (perm_prov_code,)
     )
     row = cur.fetchone()
     last = int(row[0]) if row else 0
@@ -101,8 +107,8 @@ def get_next_surveyor_code_tx(conn, perm_prov_code: str) -> str:
     cur.close()
     return f"{SURVEYOR_CODE_PREFIX}-{perm_prov_code}-{nxt:03d}"
 
-
 def main():
+    """ Main function for adding a surveyor. """
     init_page(title="PPC Surveyor Database", layout="wide")
     sidebar_menu()
     theme = theme_switcher(default="light")
@@ -127,7 +133,7 @@ def main():
 
     card_start(
         "Register a New Surveyor",
-        "If there is an error, it will be shown under the related field and your inputs will be kept.",
+        "If there is an error, it will be shown under the related field and your inputs will be kept."
     )
 
     if st.session_state.success_msg:
@@ -208,10 +214,12 @@ def main():
 
                 surveyor_code = get_next_surveyor_code_tx(conn, perm_code)
 
+                # Optionally, handle the CV upload
                 cv_blob = cv_file.getvalue() if cv_file else None
                 cv_name = cv_file.name if cv_file else None
                 cv_mime = cv_file.type if cv_file else None
 
+                # Insert Surveyor data into the database
                 cur = conn.cursor()
                 cur.execute(
                     """
@@ -260,7 +268,6 @@ def main():
                     pass
 
     card_end()
-
 
 if __name__ == "__main__":
     main()
