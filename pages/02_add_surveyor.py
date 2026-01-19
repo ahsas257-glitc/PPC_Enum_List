@@ -191,7 +191,7 @@ def main():
 
         st.divider()
 
-        st.markdown("### Tazkira Image *")
+        st.markdown("### Tazkira Image or File (Optional)")
         tazkira_files = st.file_uploader("Upload Tazkira Image, PDF or Word", type=["jpg", "jpeg", "png", "pdf", "docx"], accept_multiple_files=True)
 
         # Initialize file processing variables
