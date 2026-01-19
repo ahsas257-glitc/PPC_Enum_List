@@ -29,6 +29,7 @@ def init_form_state():
         "p_custom": "+93",
         "phone_raw": "",
         "cv_link": "",
+        "tazkira_image": None,
         "errors": {},
         "success_msg": "",
     }
@@ -190,6 +191,44 @@ def main():
 
         st.divider()
 
+        st.markdown("### Tazkira Image *")
+        tazkira_files = st.file_uploader("Upload Tazkira Image, PDF or Word", type=["jpg", "jpeg", "png", "pdf", "docx"], accept_multiple_files=True)
+
+        # Initialize file processing variables
+        tazkira_image_blob = None
+        tazkira_pdf_blob = None
+        tazkira_word_blob = None
+
+        tazkira_image_name = None
+        tazkira_pdf_name = None
+        tazkira_word_name = None
+        tazkira_image_mime = None
+        tazkira_pdf_mime = None
+        tazkira_word_mime = None
+
+        if tazkira_files:
+            for uploaded_file in tazkira_files:
+                file_name = uploaded_file.name
+                file_type = uploaded_file.type
+
+                # Process file and store in appropriate variable
+                file_blob = uploaded_file.getvalue()
+                
+                if "image" in file_type:
+                    tazkira_image_blob = file_blob
+                    tazkira_image_name = file_name
+                    tazkira_image_mime = file_type
+                elif "pdf" in file_type:
+                    tazkira_pdf_blob = file_blob
+                    tazkira_pdf_name = file_name
+                    tazkira_pdf_mime = file_type
+                elif "word" in file_type:
+                    tazkira_word_blob = file_blob
+                    tazkira_word_name = file_name
+                    tazkira_word_mime = file_type
+
+        st.divider()
+
         st.markdown("### CV (Optional)")
         st.text_input("CV Link", key="cv_link")
         cv_file = st.file_uploader("Upload CV file (optional)", type=None)
@@ -227,9 +266,12 @@ def main():
                       (Surveyor_Code, Surveyor_Name, Gender, Father_Name, Tazkira_No,
                        Email_Address, Whatsapp_Number, Phone_Number,
                        Permanent_Province_Code, Current_Province_Code,
-                       CV_Link, CV_File, CV_File_Name, CV_Mime)
+                       CV_Link, CV_File, CV_File_Name, CV_Mime,
+                       Tazkira_Image, Tazkira_Image_Name, Tazkira_Image_Mime,
+                       Tazkira_PDF, Tazkira_PDF_Name, Tazkira_PDF_Mime,
+                       Tazkira_Word, Tazkira_Word_Name, Tazkira_Word_Mime)
                     VALUES
-                      (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                      (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                     """,
                     (
                         surveyor_code,
@@ -246,6 +288,15 @@ def main():
                         cv_blob,
                         cv_name,
                         cv_mime,
+                        tazkira_image_blob,
+                        tazkira_image_name,
+                        tazkira_image_mime,
+                        tazkira_pdf_blob,
+                        tazkira_pdf_name,
+                        tazkira_pdf_mime,
+                        tazkira_word_blob,
+                        tazkira_word_name,
+                        tazkira_word_mime,
                     ),
                 )
                 cur.close()
